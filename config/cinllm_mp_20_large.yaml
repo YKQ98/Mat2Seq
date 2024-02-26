@@ -1,0 +1,32 @@
+out_dir: 'out/cinllm_mp_20_large_5k_5e4_new'
+eval_interval: 200  # how often to evaluate against the validation set
+eval_iters_train: 200
+log_interval: 10  # how often to print to the console (1 = every iteration)
+
+# whether to always save a checkpoint
+always_save_checkpoint: True
+
+# whether to validate with a validation set
+validate: True
+
+dataset: 'tokens_mp_20'
+gradient_accumulation_steps: 4
+batch_size: 16
+block_size: 768
+
+n_layer: 16
+n_head: 16
+n_embd: 1024
+dropout: 0.1
+
+learning_rate: 5e-4
+decay_lr: True
+max_iters: 5000
+# max_iters: 50000
+lr_decay_iters: 5000
+# lr_decay_iters: 50000
+min_lr: 5e-5
+beta2: 0.99
+
+warmup_iters: 100
+
