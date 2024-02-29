@@ -1,5 +1,6 @@
 import os
 import re
+from torch.utils.data import Dataset
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -203,3 +204,19 @@ class CIFTokenizer:
             })
 
         return extracted_data
+
+
+class CinDataset(Dataset):
+    def __init__(self, texts):
+        self.texts = texts
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        # if self.conditions is not None:
+        #     raw_input_ids = raw_input_ids[1:]  # Remove the first token (<s>)
+        input_ids = text[:-1]
+        targets = text[1:]
+        return input_ids, targets
