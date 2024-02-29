@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Union
 import math
 import time
+from tqdm import tqdm
 
 from crystallm import parse_config
 from omegaconf import OmegaConf
@@ -16,10 +17,12 @@ import numpy as np
 import torch
 import pickle
 from contextlib import nullcontext
+from torch.utils.data.dataloader import DataLoader
 
 from cinllm import (
     GPT,
     GPTConfig,
+    CinDataset
 )
 
 
@@ -36,13 +39,14 @@ class TrainDefaults:
 
     # data
     dataset: str = ""  # the path to the folder containing the .bin files with encoded tokens
-    gradient_accumulation_steps: int = 40  # used to simulate larger batch sizes
-    batch_size: int = 64  # if gradient_accumulation_steps > 1, this is the micro-batch size
-    block_size: int = 2048  # context of up to `block_size` previous characters
+    gradient_accumulation_steps: int = 1  # abandoned, used to simulate larger batch sizes
+    batch_size: int = 32  # if gradient_accumulation_steps > 1, this is the micro-batch size
+    block_size: int = 768  # context of up to `block_size` previous characters
+    num_workers: int = 0
 
     # model
-    n_layer: int = 12
-    n_head: int = 12
+    n_layer: int = 8
+    n_head: int = 8
     n_embd: int = 768
     dropout: float = 0.0  # for pretraining 0 is good, for finetuning try 0.1+
     bias: bool = False  # do we use bias inside LayerNorm and Linear layers?
@@ -64,7 +68,7 @@ class TrainDefaults:
     # system
     device: str = "cuda"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
     dtype: str = "bfloat16"  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-    compile: bool = True  # use PyTorch 2.0 to compile the model to be faster
+    compile: bool = False  # use PyTorch 2.0 to compile the model to be faster
     underrep_p: float = 0.0
     validate: bool = False  # whether to evaluate the model using the validation set
 
@@ -90,23 +94,29 @@ if __name__ == "__main__":
     if not C.dataset:
         raise Exception("The 'dataset' option is required and cannot be empty")
 
-    train_data = np.memmap(os.path.join(C.dataset, "train.bin"), dtype=np.uint16, mode="r")
-    val_data = np.memmap(os.path.join(C.dataset, "val.bin"), dtype=np.uint16, mode="r") if C.validate else None
+    # train_data = np.memmap(os.path.join(C.dataset, "train.bin"), dtype=np.uint16, mode="r")
+    with open(os.path.join(C.dataset, "train.pkl"), "rb") as f_train:
+        train_data = pickle.load(f_train)
+    # val_data = np.memmap(os.path.join(C.dataset, "val.bin"), dtype=np.uint16, mode="r") if C.validate else None
+    with open(os.path.join(C.dataset, "val.pkl"), "rb") as f_val:
+        val_data = pickle.load(f_val)
+    train_dataset = CinDataset(train_data.astype(np.int64))
+    valid_dataset = CinDataset(val_data.astype(np.int64))
 
-    def get_batch(split):
-        data = train_data if split == "train" else val_data
-
-        ix = torch.randint(len(data), (C.batch_size,))
-
-        x = torch.stack([torch.from_numpy((data[i:i + C.block_size]).astype(np.int64)) for i in ix])
-        y = torch.stack([torch.from_numpy((data[i + 1:i + 1 + C.block_size]).astype(np.int64)) for i in ix])
-
-        if device_type == "cuda":
-            # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
-            x, y = x.pin_memory().to(C.device, non_blocking=True), y.pin_memory().to(C.device, non_blocking=True)
-        else:
-            x, y = x.to(C.device), y.to(C.device)
-        return x, y
+    # def get_batch(split):
+    #     data = train_data if split == "train" else val_data
+    #
+    #     ix = torch.randint(len(data), (C.batch_size,))
+    #
+    #     x = torch.stack([torch.from_numpy((data[i:i + C.block_size]).astype(np.int64)) for i in ix])
+    #     y = torch.stack([torch.from_numpy((data[i + 1:i + 1 + C.block_size]).astype(np.int64)) for i in ix])
+    #
+    #     if device_type == "cuda":
+    #         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+    #         x, y = x.pin_memory().to(C.device, non_blocking=True), y.pin_memory().to(C.device, non_blocking=True)
+    #     else:
+    #         x, y = x.to(C.device), y.to(C.device)
+    #     return x, y
 
     iter_num = 0
     best_val_loss = 1e9
@@ -172,14 +182,31 @@ if __name__ == "__main__":
     def estimate_loss():
         out = {}
         model.eval()
-        for split, eval_iters in [("train", C.eval_iters_train), ("val", C.eval_iters_val)]:
-            losses = torch.zeros(eval_iters)
-            for k in range(eval_iters):
-                X, Y = get_batch(split)
-                with ctx:
-                    logits, loss = model(X, Y)
-                losses[k] = loss.item()
-            out[split] = losses.mean()
+        losses = []
+        loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
+                            batch_size=C.batch_size,
+                            num_workers=C.num_workers)
+        pbar = tqdm(enumerate(loader), total=len(loader))
+        for it, (input_ids, targets) in pbar:
+            input_ids = input_ids.to(C.device)
+            targets = targets.to(C.device)
+            logits, loss = model(input_ids, targets)
+            loss = loss.mean()
+            losses.append(loss.item())
+            out["train"] = float(np.mean(losses))
+
+        losses = []
+        loader = DataLoader(valid_dataset, shuffle=True, pin_memory=True,
+                            batch_size=C.batch_size,
+                            num_workers=C.num_workers)
+        pbar = tqdm(enumerate(loader), total=len(loader))
+        for it, (input_ids, targets) in pbar:
+            input_ids = input_ids.to(C.device)
+            targets = targets.to(C.device)
+            logits, loss = model(input_ids, targets)
+            loss = loss.mean()
+            losses.append(loss.item())
+            out["val"] = float(np.mean(losses))
         model.train()
         return out
 
@@ -198,70 +225,78 @@ if __name__ == "__main__":
         return C.min_lr + coeff * (C.learning_rate - C.min_lr)
 
     # training loop
-    X, Y = get_batch("train")
+    # X, Y = get_batch("train")
+
     t0 = time.time()
     local_iter_num = 0  # number of iterations in the lifetime of this process
     running_mfu = -1.0
+
     while True:
-
-        # determine and set the learning rate for this iteration
-        lr = get_lr(iter_num) if C.decay_lr else C.learning_rate
-        for param_group in optimizer.param_groups:
-            param_group["lr"] = lr
-
-        # evaluate the loss on train/val sets and write checkpoints
-        if iter_num % C.eval_interval == 0:
-            if C.validate:
-                losses = estimate_loss()
-                print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-            if (C.validate and losses["val"] < best_val_loss) or C.always_save_checkpoint:
-                best_val_loss = losses["val"] if C.validate else 0.
-                if iter_num > 0:
-                    checkpoint = {
-                        "model": model.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                        "model_args": model_args,
-                        "iter_num": iter_num,
-                        "best_val_loss": best_val_loss,
-                        "config": dict(C),
-                    }
-                    print(f"saving checkpoint to {C.out_dir}...")
-                    torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
-        if iter_num == 0 and C.eval_only:
-            break
-
         # forward backward update, with optional gradient accumulation to simulate larger batch size
         # and using the GradScaler if data type is float16
-        for micro_step in range(C.gradient_accumulation_steps):
-            with ctx:
-                logits, loss = model(X, Y)
-            # immediately async prefetch next batch while model is doing the forward pass on the GPU
-            X, Y = get_batch("train")
-            # backward pass, with gradient scaling if training in fp16
+        loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
+                            batch_size=C.batch_size,
+                            num_workers=C.num_workers)
+        pbar = tqdm(enumerate(loader), total=len(loader))
+        for it, (input_ids, targets) in pbar:
+            input_ids = input_ids.to(C.device)
+            targets = targets.to(C.device)
+            # determine and set the learning rate for this iteration
+            lr = get_lr(iter_num) if C.decay_lr else C.learning_rate
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr
+
+            # for micro_step in range(C.gradient_accumulation_steps):
+            #     with ctx:
+            logits, loss = model(input_ids, targets)
+                # immediately async prefetch next batch while model is doing the forward pass on the GPU
+                # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
-        # clip the gradient
-        if C.grad_clip != 0.0:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), C.grad_clip)
-        # step the optimizer and scaler if training in fp16
-        scaler.step(optimizer)
-        scaler.update()
-        # flush the gradients as soon as we can, no need for this memory anymore
-        optimizer.zero_grad(set_to_none=True)
+            # clip the gradient
+            if C.grad_clip != 0.0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), C.grad_clip)
+            # step the optimizer and scaler if training in fp16
+            scaler.step(optimizer)
+            scaler.update()
+            # flush the gradients as soon as we can, no need for this memory anymore
+            optimizer.zero_grad(set_to_none=True)
 
-        # timing and logging
-        t1 = time.time()
-        dt = t1 - t0
-        t0 = t1
-        if iter_num % C.log_interval == 0:
-            lossf = loss.item()  # loss as float. note: this is a CPU-GPU sync point
-            if local_iter_num >= 5:  # let the training loop settle a bit
-                mfu = model.estimate_mfu(C.batch_size * C.gradient_accumulation_steps, dt)
-                running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
-            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt * 1000:.2f}ms, mfu {running_mfu * 100:.2f}%")
-        iter_num += 1
-        local_iter_num += 1
+            # timing and logging
+            t1 = time.time()
+            dt = t1 - t0
+            t0 = t1
+            if iter_num % C.log_interval == 0:
+                lossf = loss.item()  # loss as float. note: this is a CPU-GPU sync point
+                if local_iter_num >= 5:  # let the training loop settle a bit
+                    mfu = model.estimate_mfu(C.batch_size, dt)  # C.batch_size * C.gradient_accumulation_steps
+                    running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
+                print(f"iter {iter_num}: loss {lossf:.4f}, time {dt * 1000:.2f}ms, mfu {running_mfu * 100:.2f}%")
+            iter_num += 1
+            local_iter_num += 1
 
-        # termination conditions
-        if iter_num > C.max_iters:
-            break
+            # evaluate the loss on train/val sets and write checkpoints
+            if iter_num % C.eval_interval == 0:
+                if C.validate:
+                    losses = estimate_loss()
+                    print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+                if (C.validate and losses["val"] < best_val_loss) or C.always_save_checkpoint:
+                    best_val_loss = losses["val"] #if C.validate else 0.
+                    if iter_num > 0:
+                        checkpoint = {
+                            "model": model.state_dict(),
+                            "optimizer": optimizer.state_dict(),
+                            "model_args": model_args,
+                            "iter_num": iter_num,
+                            "best_val_loss": best_val_loss,
+                            "config": dict(C),
+                        }
+                        print(f"saving checkpoint to {C.out_dir}...")
+                        os.makedirs(C.out_dir, exist_ok=True)
+                        torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
+            if iter_num == 0 and C.eval_only:
+                break
+
+            # termination conditions
+            if iter_num > C.max_iters:
+                break

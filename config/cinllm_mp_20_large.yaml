@@ -9,8 +9,8 @@ always_save_checkpoint: True
 # whether to validate with a validation set
 validate: True
 
-dataset: 'tokens_mp_20'
-gradient_accumulation_steps: 4
+dataset: '/mnt/data/shared/keqiangyan/tokens_mp_20'
+gradient_accumulation_steps: 1  # abandoned
 batch_size: 16
 block_size: 768
 
