@@ -17,6 +17,8 @@ ATOMS = ["Si", "C", "Pb", "I", "Br", "Cl", "Eu", "O", "Fe", "Sb", "In", "S", "N"
 
 DIGITS = [str(d) for d in list(range(10))]
 
+INTS = [str(d) for d in list(range(300))]
+
 KEYWORDS = [
     "space_group_symbol",
     "formula",
@@ -47,6 +49,9 @@ class CIFTokenizer:
         space_groups_sg = [sg+"_sg" for sg in space_groups]
         self._tokens.extend(space_groups_sg)
 
+        digits_int = [v+"_int" for v in INTS]
+        self._tokens.extend(digits_int)
+
         self._escaped_tokens = [re.escape(token) for token in self._tokens]
         self._escaped_tokens.sort(key=len, reverse=True)
 
@@ -57,6 +62,9 @@ class CIFTokenizer:
         #  for decoding convenience
         for sg in space_groups_sg:
             self._id_to_token[self.token_to_id[sg]] = sg.replace("_sg", "")
+        
+        for v_int in digits_int:
+            self._id_to_token[self.token_to_id[v_int]] = sg.replace("_int", "")
 
     @staticmethod
     def atoms():
@@ -122,7 +130,7 @@ class CIFTokenizer:
         for element, count in elements_counts:
             if not element: break
             if not count: count ="1"
-            seq_res += element + " " + count + " "
+            seq_res += element + " " + count + "_int "
         seq_res += "\n"
         # space group name
         seq_res += "space_group_symbol " + extracted_data["space_group_symbol"] + "\n"
@@ -137,19 +145,21 @@ class CIFTokenizer:
         # atoms
         for idx in range(len(extracted_data["atoms"])):
             tmp = extracted_data["atoms"][idx]
-            seq_res += tmp["type"] + " " + tmp["coordinates"][0] + " " + tmp["coordinates"][1] + " " + tmp["coordinates"][2] + "\n"
+            seq_res += tmp["type"] + " " + tmp["num"] + "_int " + tmp["coordinates"][0] + " " + tmp["coordinates"][1] + " " + tmp["coordinates"][2] + "\n"
         seq_res += "\n"
         # Create a regex pattern by joining the escaped tokens with '|'
+        # print(seq_res)
         token_pattern = '|'.join(self._escaped_tokens)
         # Add a regex pattern to match any sequence of characters separated by whitespace or punctuation
         full_pattern = f'({token_pattern}|\\w+|[\\.,;!?])'
         # Tokenize the input string using the regex pattern
         seq_res = re.sub(r'[ \t]+', ' ', seq_res)
         tokens = re.findall(full_pattern, seq_res)
+        # print(tokens)
         padding_length = max_length - len(tokens)
         if padding_length > 0:
             tokens.extend(["<pad>"] * padding_length)
-        
+
         return tokens
 
     def tokenize_cif_preprocess(self, cif_string):
@@ -197,9 +207,11 @@ class CIFTokenizer:
                 continue
             atom_info = line.split()
             atom_type = atom_info[0]
+            num_atoms = atom_info[2]
             x, y, z = atom_info[3], atom_info[4], atom_info[5]
             extracted_data["atoms"].append({
                 "type": atom_type,
+                "num": num_atoms,
                 "coordinates": (x, y, z)
             })
 

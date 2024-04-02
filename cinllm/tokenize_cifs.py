@@ -145,17 +145,18 @@ if __name__ == "__main__":
         for t in tqdm(tokenized_cifs_val, desc="concatenating val tokens..."):
             val_data.append(tokenizer.encode(t))
 
-    print(f"train has {len(train_data):,} samples")
-    if has_val:
-        print(f"val has {len(val_data):,} samples")
     print(f"vocab size: {len(tokenizer.token_to_id)}")
 
-    print("exporting to .bin files...")
+    print("exporting to .pkl files...")
     train_data = np.array(train_data, dtype=np.uint16)
-    train_data.tofile(os.path.join(out_dir, "train.bin"))
+    print(f"train has {len(train_data):,} samples")
+    with open(os.path.join(out_dir,"train.pkl"), "wb") as f:
+        pickle.dump(train_data, f)
     if has_val:
         val_data = np.array(val_data, dtype=np.uint16)
-        val_data.tofile(os.path.join(out_dir, "val.bin"))
+        print(f"val has {len(val_data):,} samples")
+        with open(os.path.join(out_dir,"val.pkl"), "wb") as f:
+            pickle.dump(val_data, f)
 
     # save the meta information as well, to help us encode/decode later
     meta = {
@@ -170,7 +171,7 @@ if __name__ == "__main__":
     subdir_name = os.path.basename(os.path.normpath(out_dir))
     tar_gz_filename = os.path.join(out_dir, f"{subdir_name}.tar.gz")
     with tarfile.open(tar_gz_filename, "w:gz") as tar:
-        for filename in ["train.bin", "val.bin", "meta.pkl"]:
+        for filename in ["train.pkl", "val.pkl", "meta.pkl"]:
             file_path = os.path.join(out_dir, filename)
             if os.path.exists(file_path):
                 arcname = os.path.join(subdir_name, filename)

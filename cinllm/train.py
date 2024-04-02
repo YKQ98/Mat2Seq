@@ -19,11 +19,34 @@ import pickle
 from contextlib import nullcontext
 from torch.utils.data.dataloader import DataLoader
 
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 from cinllm import (
     GPT,
     GPTConfig,
     CinDataset
 )
+
+
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+
+    # initialize the process group
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
+
+
+def cleanup():
+    dist.destroy_process_group()
+
+
+def run_DDP(rank, world_size, args):
+    setup(rank, world_size)
+    run(args, rank)
+    cleanup()
 
 
 @dataclass
@@ -71,14 +94,15 @@ class TrainDefaults:
     compile: bool = False  # use PyTorch 2.0 to compile the model to be faster
     underrep_p: float = 0.0
     validate: bool = False  # whether to evaluate the model using the validation set
+    dist: bool = False  # parallelize across multiple GPUs
 
 
-
-if __name__ == "__main__":
-    C = parse_config(TrainDefaults)
-
+def run(C, rank=None):
     print("Using configuration:")
     print(OmegaConf.to_yaml(C))
+
+    if C.dist:
+        print(f"Distributed training...")
 
     print(f"Creating {C.out_dir}...")
     os.makedirs(C.out_dir, exist_ok=True)
@@ -163,12 +187,20 @@ if __name__ == "__main__":
     if C.block_size < model.config.block_size:
         model.crop_block_size(C.block_size)
         model_args["block_size"] = C.block_size  # so that the checkpoint will have the right value
-    model.to(C.device)
+    # model.to(C.device)
+    if C.dist:
+        C.device = f'cuda:{rank}'
+        model = model.to(C.device)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[C.device])
+    elif torch.cuda.is_available():
+        C.device = torch.cuda.current_device()
+        model = torch.nn.DataParallel(model).to(C.device)
 
     # initialize a GradScaler; if enabled=False scaler is a no-op
     scaler = torch.cuda.amp.GradScaler(enabled=(C.dtype == "float16"))
-
-    optimizer = model.configure_optimizers(C.weight_decay, C.learning_rate, (C.beta1, C.beta2))
+    raw_model = model.module if hasattr(model, "module") else model
+    optimizer = raw_model.configure_optimizers(C.weight_decay, C.learning_rate, (C.beta1, C.beta2))
+    # optimizer = model.configure_optimizers(C.weight_decay, C.learning_rate, (C.beta1, C.beta2))
     if C.init_from == "resume":
         optimizer.load_state_dict(checkpoint["optimizer"])
 
@@ -183,10 +215,16 @@ if __name__ == "__main__":
         out = {}
         model.eval()
         losses = []
-        loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
-                            batch_size=C.batch_size,
-                            num_workers=C.num_workers)
-        pbar = tqdm(enumerate(loader), total=len(loader))
+        if C.dist:
+            sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+            loader = DataLoader(train_dataset, shuffle=False, pin_memory=True,
+                                batch_size=C.batch_size,
+                                sampler=sampler)
+        else:
+            loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
+                                batch_size=C.batch_size,
+                                num_workers=C.num_workers)
+        pbar = enumerate(loader)
         for it, (input_ids, targets) in pbar:
             input_ids = input_ids.to(C.device)
             targets = targets.to(C.device)
@@ -196,10 +234,16 @@ if __name__ == "__main__":
             out["train"] = float(np.mean(losses))
 
         losses = []
-        loader = DataLoader(valid_dataset, shuffle=True, pin_memory=True,
-                            batch_size=C.batch_size,
-                            num_workers=C.num_workers)
-        pbar = tqdm(enumerate(loader), total=len(loader))
+        if C.dist:
+            sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset)
+            loader = DataLoader(valid_dataset, shuffle=False, pin_memory=True,
+                                batch_size=C.batch_size,
+                                sampler=sampler)
+        else:
+            loader = DataLoader(valid_dataset, shuffle=True, pin_memory=True,
+                                batch_size=C.batch_size,
+                                num_workers=C.num_workers)
+        pbar = enumerate(loader)
         for it, (input_ids, targets) in pbar:
             input_ids = input_ids.to(C.device)
             targets = targets.to(C.device)
@@ -234,9 +278,15 @@ if __name__ == "__main__":
     while True:
         # forward backward update, with optional gradient accumulation to simulate larger batch size
         # and using the GradScaler if data type is float16
-        loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
-                            batch_size=C.batch_size,
-                            num_workers=C.num_workers)
+        if C.dist:
+            sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+            loader = DataLoader(train_dataset, shuffle=False, pin_memory=True,
+                                batch_size=C.batch_size,
+                                sampler=sampler)
+        else:
+            loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
+                                batch_size=C.batch_size,
+                                num_workers=C.num_workers)
         pbar = tqdm(enumerate(loader), total=len(loader))
         for it, (input_ids, targets) in pbar:
             input_ids = input_ids.to(C.device)
@@ -249,8 +299,8 @@ if __name__ == "__main__":
             # for micro_step in range(C.gradient_accumulation_steps):
             #     with ctx:
             logits, loss = model(input_ids, targets)
-                # immediately async prefetch next batch while model is doing the forward pass on the GPU
-                # backward pass, with gradient scaling if training in fp16
+            # immediately async prefetch next batch while model is doing the forward pass on the GPU
+            # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
             # clip the gradient
             if C.grad_clip != 0.0:
@@ -269,7 +319,8 @@ if __name__ == "__main__":
             if iter_num % C.log_interval == 0:
                 lossf = loss.item()  # loss as float. note: this is a CPU-GPU sync point
                 if local_iter_num >= 5:  # let the training loop settle a bit
-                    mfu = model.estimate_mfu(C.batch_size, dt)  # C.batch_size * C.gradient_accumulation_steps
+                    raw_model = model.module if hasattr(model, "module") else model
+                    mfu = raw_model.estimate_mfu(C.batch_size, dt)  # C.batch_size * C.gradient_accumulation_steps
                     running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
                 print(f"iter {iter_num}: loss {lossf:.4f}, time {dt * 1000:.2f}ms, mfu {running_mfu * 100:.2f}%")
             iter_num += 1
@@ -281,22 +332,82 @@ if __name__ == "__main__":
                     losses = estimate_loss()
                     print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
                 if (C.validate and losses["val"] < best_val_loss) or C.always_save_checkpoint:
-                    best_val_loss = losses["val"] #if C.validate else 0.
+                    best_val_loss = losses["val"]  # if C.validate else 0.
                     if iter_num > 0:
-                        checkpoint = {
-                            "model": model.state_dict(),
-                            "optimizer": optimizer.state_dict(),
-                            "model_args": model_args,
-                            "iter_num": iter_num,
-                            "best_val_loss": best_val_loss,
-                            "config": dict(C),
-                        }
-                        print(f"saving checkpoint to {C.out_dir}...")
-                        os.makedirs(C.out_dir, exist_ok=True)
-                        torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
-            if iter_num == 0 and C.eval_only:
-                break
+                        if C.dist:
+                            if C.device == 'cuda:0':
+                                raw_model = model.module if hasattr(model, "module") else model
+                                checkpoint = {
+                                    "model": raw_model.state_dict(),
+                                    "optimizer": optimizer.state_dict(),
+                                    "model_args": model_args,
+                                    "iter_num": iter_num,
+                                    "best_val_loss": best_val_loss,
+                                    "config": dict(C),
+                                }
+                                print("saving checkpoint with validation loss %f" % losses["val"])
+                                os.makedirs(C.out_dir, exist_ok=True)
+                                torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
+                        else:
+                            raw_model = model.module if hasattr(model, "module") else model
+                            checkpoint = {
+                                "model": raw_model.state_dict(),
+                                "optimizer": optimizer.state_dict(),
+                                "model_args": model_args,
+                                "iter_num": iter_num,
+                                "best_val_loss": best_val_loss,
+                                "config": dict(C),
+                            }
+                            print("saving checkpoint with validation loss %f" % losses["val"])
+                            os.makedirs(C.out_dir, exist_ok=True)
+                            torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
 
-            # termination conditions
-            if iter_num > C.max_iters:
-                break
+        if iter_num == 0 and C.eval_only:
+            break
+
+        # termination conditions
+        if iter_num > C.max_iters:
+            if C.dist:
+                if C.device == 'cuda:0':
+                    raw_model = model.module if hasattr(model, "module") else model
+                    checkpoint = {
+                        "model": raw_model.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                        "model_args": model_args,
+                        "iter_num": iter_num,
+                        "best_val_loss": best_val_loss,
+                        "config": dict(C),
+                    }
+                    print(f"saving checkpoint to {C.out_dir}...")
+                    os.makedirs(C.out_dir, exist_ok=True)
+                    torch.save(checkpoint, os.path.join(C.out_dir, "ckpt_final.pt"))
+            else:
+                raw_model = model.module if hasattr(model, "module") else model
+                checkpoint = {
+                    "model": raw_model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "model_args": model_args,
+                    "iter_num": iter_num,
+                    "best_val_loss": best_val_loss,
+                    "config": dict(C),
+                }
+                print(f"saving checkpoint to {C.out_dir}...")
+                os.makedirs(C.out_dir, exist_ok=True)
+                torch.save(checkpoint, os.path.join(C.out_dir, "ckpt_final.pt"))
+
+            break
+
+
+if __name__ == "__main__":
+    C = parse_config(TrainDefaults)
+
+    if C.dist:
+        world_size = torch.cuda.device_count()
+        print(f"world_size: {world_size}")
+        mp.spawn(run_DDP,
+                 args=(world_size, C),
+                 nprocs=world_size,
+                 join=True)
+    else:
+        run(C)
+

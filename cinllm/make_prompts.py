@@ -13,7 +13,7 @@ PATTERN_COMP = re.compile(r"(data_[^\n]*\n)", re.MULTILINE)
 PATTERN_COMP_SG = re.compile(r"(data_[^\n]*\n)loop_[\s\S]*?(_symmetry_space_group_name_H-M[^\n]*\n)", re.MULTILINE)
 
 
-def extract_prompt(cif_str, pattern):
+def extract_prompt(cif_str, pattern, space=False):
     match = re.search(pattern, cif_str)
     if match:
         start_index, end_index = match.start(), match.end()
@@ -22,6 +22,7 @@ def extract_prompt(cif_str, pattern):
         
         for line in lines:
             # Extract space group symbol
+            res = ""
             if "_symmetry_space_group_name_H-M" in line:
                 spaceg = "space_group_symbol " + line.split()[-1] + "_sg\n"
             # Extract formula
@@ -33,10 +34,12 @@ def extract_prompt(cif_str, pattern):
                 for element, count in elements_counts:
                     if not element: break
                     if not count: count ="1"
-                    form += element + " " + count + " "
+                    form += element + " " + count + "_int "
                 form += "\n"
-        print(form + spaceg)
-        return form + spaceg
+        if space: res = form + spaceg
+        else: res = form
+        print(res)
+        return res
     else:
         raise Exception(f"could not extract pattern: \n{cif_str}")
 
@@ -74,7 +77,7 @@ if __name__ == "__main__":
 
     with tarfile.open(out_fname, "w:gz") as tar:
         for id, cif in tqdm(cifs, desc="preparing prompts..."):
-            prompt = extract_prompt(cif, PATTERN_COMP_SG if with_spacegroup else PATTERN_COMP)
+            prompt = extract_prompt(cif, PATTERN_COMP_SG if with_spacegroup else PATTERN_COMP, space=with_spacegroup)
 
             prompt_file = tarfile.TarInfo(name=f"{id}.txt")
             prompt_bytes = prompt.encode("utf-8")

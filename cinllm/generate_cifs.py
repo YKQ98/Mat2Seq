@@ -17,6 +17,10 @@ from crystallm import (
     array_split,
 )
 
+# Set the visible CUDA devices to GPU 0 and GPU 2
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,4,5'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,4,3,5,6,7'
+
 
 def progress_listener(queue, n):
     pbar = tqdm(total=n, desc="generating CIFs from prompts...")
@@ -69,7 +73,7 @@ def generate(model_dir, seed, device, dtype, num_gens, temperature, top_k, chunk
                     output = decode(y[0].tolist())
                     gens.append(output)
                 generated.append((id, gens))
-                print(gens)
+                # print(gens)
                 queue.put(1)
     return generated
 

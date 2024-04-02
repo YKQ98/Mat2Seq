@@ -1397,7 +1397,9 @@ class CifWriter:
         angle_tolerance: float = 5,
         refine_struct: bool = True,
         write_site_properties: bool = False,
-        print: bool = False,
+        printout: bool = False,
+        pos_order: bool = False,
+        full_order: bool = False,
     ) -> None:
         """
         Args:
@@ -1526,38 +1528,75 @@ class CifWriter:
                     count += 1
         else:
             # The following just presents a deterministic ordering.
-            unique_sites = [
-                (
-                    sorted(sites, key=lambda s: tuple(round(x % 1., 8) % 1. for x in s.frac_coords))[0],
-                    len(sites),
-                )
-                for sites in spg_analyzer.get_symmetrized_structure().equivalent_sites
-            ]
-            if print:
-                import pdb
-                pdb.set_trace()
-            # print(unique_sites)
-            # print(sorted(spg_analyzer.get_symmetrized_structure().equivalent_sites[0], key=lambda s: tuple(x % 1.0 for x in s.frac_coords)))
-            for site, mult in sorted(
-                unique_sites,
-                key=lambda t: (
-                    t[0].species.average_electroneg,
-                    -t[1],
-                    t[0].a,
-                    t[0].b,
-                    t[0].c,
-                ),
-            ):
-                for sp, occu in site.species.items():
-                    atom_site_type_symbol.append(str(sp))
-                    atom_site_symmetry_multiplicity.append(f"{mult}")
-                    atom_site_fract_x.append(format_str.format(site.a))
-                    atom_site_fract_y.append(format_str.format(site.b))
-                    atom_site_fract_z.append(format_str.format(site.c))
-                    site_label = site.label if site.label != site.species_string else f"{sp.symbol}{count}"
-                    atom_site_label.append(site_label)
-                    atom_site_occupancy.append(str(occu))
-                    count += 1
+            if full_order:
+                unique_sites = [site for site in struct]
+                for site in sorted(
+                    unique_sites,
+                    key=lambda t: (
+                        t.species.average_electroneg,
+                        t.a,
+                        t.b,
+                        t.c,
+                    ),
+                ):
+                    for sp, occu in site.species.items():
+                        atom_site_type_symbol.append(str(sp))
+                        atom_site_symmetry_multiplicity.append("1")
+                        atom_site_fract_x.append(format_str.format(site.a))
+                        atom_site_fract_y.append(format_str.format(site.b))
+                        atom_site_fract_z.append(format_str.format(site.c))
+                        site_label = site.label if site.label != site.species_string else f"{sp.symbol}{count}"
+                        atom_site_label.append(site_label)
+                        atom_site_occupancy.append(str(occu))
+                        count += 1
+            else:
+                unique_sites = [
+                    (
+                        sorted(sites, key=lambda s: tuple(round(x % 1., 7) % 1. for x in s.frac_coords))[0],
+                        len(sites),
+                    )
+                    for sites in spg_analyzer.get_symmetrized_structure().equivalent_sites
+                ]
+                if not pos_order:
+                    for site, mult in sorted(
+                        unique_sites,
+                        key=lambda t: (
+                            t[0].species.average_electroneg,
+                            -t[1],
+                            t[0].a,
+                            t[0].b,
+                            t[0].c,
+                        ),
+                    ):
+                        for sp, occu in site.species.items():
+                            atom_site_type_symbol.append(str(sp))
+                            atom_site_symmetry_multiplicity.append(f"{mult}")
+                            atom_site_fract_x.append(format_str.format(site.a))
+                            atom_site_fract_y.append(format_str.format(site.b))
+                            atom_site_fract_z.append(format_str.format(site.c))
+                            site_label = site.label if site.label != site.species_string else f"{sp.symbol}{count}"
+                            atom_site_label.append(site_label)
+                            atom_site_occupancy.append(str(occu))
+                            count += 1
+                else:
+                    for site, mult in sorted(
+                        unique_sites,
+                        key=lambda t: (
+                            t[0].a,
+                            t[0].b,
+                            t[0].c,
+                        ),
+                    ):
+                        for sp, occu in site.species.items():
+                            atom_site_type_symbol.append(str(sp))
+                            atom_site_symmetry_multiplicity.append(f"{mult}")
+                            atom_site_fract_x.append(format_str.format(site.a))
+                            atom_site_fract_y.append(format_str.format(site.b))
+                            atom_site_fract_z.append(format_str.format(site.c))
+                            site_label = site.label if site.label != site.species_string else f"{sp.symbol}{count}"
+                            atom_site_label.append(site_label)
+                            atom_site_occupancy.append(str(occu))
+                            count += 1
 
         block["_atom_site_type_symbol"] = atom_site_type_symbol
         block["_atom_site_label"] = atom_site_label
