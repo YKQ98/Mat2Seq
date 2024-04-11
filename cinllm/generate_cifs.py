@@ -68,9 +68,10 @@ def generate(model_dir, seed, device, dtype, num_gens, temperature, top_k, chunk
                 start_ids = encode(tokenizer.prompt_tokenize(prompt))
                 x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...]
                 gens = []
-                for _ in range(num_gens):
-                    y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-                    output = decode(y[0].tolist())
+                y, gen_ends = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k, num_gens=num_gens)
+                y = [y[i_idx, : gen_ends[i_idx]] for i_idx in range(num_gens)]
+                for i_idx in range(num_gens):
+                    output = decode(y[i_idx].tolist())
                     gens.append(output)
                 generated.append((id, gens))
                 # print(gens)
