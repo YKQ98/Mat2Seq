@@ -313,7 +313,7 @@ class GPT(nn.Module):
         newline_id = tokenizer.token_to_id["\n"]
         prev_id = None
         end_cnt = 0
-        gen_ends = torch.zeros(num_gens)
+        gen_ends = - torch.ones(num_gens).int()
         for _ in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
@@ -333,12 +333,12 @@ class GPT(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)
             # a sequence of two newlines indicates the end of a CIF file
             for end_i in range(num_gens):
-                if prev_id[end_i] is not None and prev_id[end_i] == newline_id and idx_next.item()[end_i] == newline_id:
+                if prev_id is not None and prev_id[end_i].item() == newline_id and idx_next.detach().cpu()[end_i].item() == newline_id:
                     if gen_ends[end_i] < 1e-5:
                         gen_ends[end_i] = idx.shape[1]
                         end_cnt += 1
             if end_cnt == num_gens:
                 break
-            prev_id = idx_next.item()
+            prev_id = idx_next.detach().cpu()
 
         return idx, gen_ends
