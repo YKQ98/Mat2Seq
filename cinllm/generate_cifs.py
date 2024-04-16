@@ -18,7 +18,7 @@ from cinllm import (
 from crystallm import array_split
 
 # Set the visible CUDA devices to GPU 0 and GPU 2
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,4,5'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,4,3,5,6,7'
 
 
@@ -65,13 +65,15 @@ def generate(model_dir, seed, device, dtype, num_gens, temperature, top_k, chunk
     with torch.no_grad():
         with ctx:
             for id, prompt in chunk_of_prompts:
+                print(prompt)
                 start_ids = encode(tokenizer.prompt_tokenize(prompt))
-                x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...]
+                x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...].repeat(num_gens, 1)
                 gens = []
                 y, gen_ends = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k, num_gens=num_gens)
                 y = [y[i_idx, : gen_ends[i_idx]] for i_idx in range(num_gens)]
                 for i_idx in range(num_gens):
                     output = decode(y[i_idx].tolist())
+                    print(output)
                     gens.append(output)
                 generated.append((id, gens))
                 # print(gens)
@@ -167,6 +169,7 @@ if __name__ == "__main__":
     queue.put("kill")
     pool.close()
     pool.join()
+
 
     with tarfile.open(out_file, "w:gz") as tar:
         for id, gens in tqdm(generated, desc=f"writing CIF files to {out_file}..."):
