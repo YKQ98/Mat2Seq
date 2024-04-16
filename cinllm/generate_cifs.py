@@ -11,11 +11,11 @@ from contextlib import nullcontext
 import torch
 
 from cinllm import CIFTokenizer
-from crystallm import (
+from cinllm import (
     GPT,
     GPTConfig,
-    array_split,
 )
+from crystallm import array_split
 
 # Set the visible CUDA devices to GPU 0 and GPU 2
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,4,5'
