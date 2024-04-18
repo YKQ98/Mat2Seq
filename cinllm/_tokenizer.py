@@ -113,7 +113,7 @@ class CIFTokenizer:
         # decoder: take a list of integers (i.e. encoded tokens), output a string
         return ''.join([self._id_to_token[i] for i in ids])
 
-    def tokenize_cif(self, cif_string, max_length=768):
+    def tokenize_cif(self, cif_string, max_length=1385):
         # Preprocessing step to replace '_symmetry_space_group_name_H-M Pm'
         #  with '_symmetry_space_group_name_H-M Pm_sg',to disambiguate from atom 'Pm',
         #  or any space group symbol to avoid problematic cases, like 'P1'

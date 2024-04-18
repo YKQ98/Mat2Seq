@@ -193,7 +193,7 @@ def run(C, rank=None):
         model = model.to(C.device)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[C.device])
     elif torch.cuda.is_available():
-        C.device = torch.cuda.current_device()
+        C.device = f'cuda:0'  #torch.cuda.current_device()
         model = torch.nn.DataParallel(model).to(C.device)
 
     # initialize a GradScaler; if enabled=False scaler is a no-op
