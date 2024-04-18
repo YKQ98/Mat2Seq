@@ -303,7 +303,7 @@ class GPT(nn.Module):
         return mfu
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, num_gens=1):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -312,6 +312,8 @@ class GPT(nn.Module):
         tokenizer = CIFTokenizer()
         newline_id = tokenizer.token_to_id["\n"]
         prev_id = None
+        end_cnt = 0
+        gen_ends = - torch.ones(num_gens).int()
         for _ in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
@@ -330,8 +332,13 @@ class GPT(nn.Module):
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
             # a sequence of two newlines indicates the end of a CIF file
-            if prev_id is not None and prev_id == newline_id and idx_next.item() == newline_id:
+            for end_i in range(num_gens):
+                if prev_id is not None and prev_id[end_i].item() == newline_id and idx_next.detach().cpu()[end_i].item() == newline_id:
+                    if gen_ends[end_i] < 1e-5:
+                        gen_ends[end_i] = idx.shape[1]
+                        end_cnt += 1
+            if end_cnt == num_gens:
                 break
-            prev_id = idx_next.item()
+            prev_id = idx_next.detach().cpu()
 
-        return idx
+        return idx, gen_ends

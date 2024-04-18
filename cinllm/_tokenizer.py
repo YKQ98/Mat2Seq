@@ -64,7 +64,7 @@ class CIFTokenizer:
             self._id_to_token[self.token_to_id[sg]] = sg.replace("_sg", "")
         
         for v_int in digits_int:
-            self._id_to_token[self.token_to_id[v_int]] = sg.replace("_int", "")
+            self._id_to_token[self.token_to_id[v_int]] = v_int.replace("_int", "")
 
     @staticmethod
     def atoms():
