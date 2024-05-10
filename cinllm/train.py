@@ -299,7 +299,9 @@ def run(C, rank=None):
             # for micro_step in range(C.gradient_accumulation_steps):
             #     with ctx:
             logits, loss = model(input_ids, targets)
-            if (it + 1) % C.gradient_accumulation_steps:
+            # backward pass, with gradient scaling if training in fp16
+            scaler.scale(loss).backward()
+            if (it + 1) % C.gradient_accumulation_steps == 0:
                 # clip the gradient
                 if C.grad_clip != 0.0:
                     scaler.unscale_(optimizer)
@@ -311,9 +313,7 @@ def run(C, rank=None):
                 optimizer.zero_grad(set_to_none=True)
                 iter_num += 1
                 local_iter_num += 1
-            else:
-                # backward pass, with gradient scaling if training in fp16
-                scaler.scale(loss_accu).backward()
+                
 
             # timing and logging
             t1 = time.time()
