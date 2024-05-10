@@ -19,7 +19,7 @@ from crystallm import array_split
 
 # Set the visible CUDA devices to GPU 0 and GPU 2
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,4,3,5,6,7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
 
 
 def progress_listener(queue, n):
@@ -59,7 +59,7 @@ def generate(model_dir, seed, device, dtype, num_gens, temperature, top_k, chunk
     model.load_state_dict(state_dict)
     model.eval()
     model.to(device)
-    model = torch.compile(model)  # requires PyTorch 2.0
+    # model = torch.compile(model)  # requires PyTorch 2.0
 
     generated = []
     with torch.no_grad():

@@ -32,7 +32,7 @@ from cinllm import (
 
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '12359'
 
     # initialize the process group
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
@@ -162,9 +162,14 @@ def run(C, rank=None):
         model_args["vocab_size"] = meta_vocab_size if meta_vocab_size is not None else 371
         gptconf = GPTConfig(**model_args)
         model = GPT(gptconf)
+        # ckpt_path = '/mnt/data/shared/xinerli/cryllm/out/cinllm_23M_16_16_1024_38_2048_3e4_200w/750000_ckpt.pt'
+        # print(f"Loading checkpoint from {ckpt_path}...")
+        # checkpoint = torch.load(ckpt_path, map_location=C.device)
+        # state_dict = checkpoint["model"]
+        # model.load_state_dict(state_dict, strict=True)
     elif C.init_from == "resume":
         print(f"Resuming training from {C.out_dir}...")
-        ckpt_path = os.path.join(C.out_dir, "ckpt.pt")
+        ckpt_path = os.path.join(C.out_dir, "690000_ckpt.pt")
         checkpoint = torch.load(ckpt_path, map_location=C.device)
         checkpoint_model_args = checkpoint["model_args"]
         # force these config attributes to be equal otherwise we can't even resume training;
@@ -274,20 +279,24 @@ def run(C, rank=None):
     t0 = time.time()
     local_iter_num = 0  # number of iterations in the lifetime of this process
     running_mfu = -1.0
-
+    epoch = int(-1)
+    if C.dist:
+        sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        loader = DataLoader(train_dataset, shuffle=False, pin_memory=True,
+                            batch_size=C.batch_size,
+                            sampler=sampler)
+    else:
+        loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
+                            batch_size=C.batch_size,
+                            num_workers=C.num_workers)
     while True:
+        epoch += 1
         # forward backward update, with optional gradient accumulation to simulate larger batch size
         # and using the GradScaler if data type is float16
-        if C.dist:
-            sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-            loader = DataLoader(train_dataset, shuffle=False, pin_memory=True,
-                                batch_size=C.batch_size,
-                                sampler=sampler)
-        else:
-            loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
-                                batch_size=C.batch_size,
-                                num_workers=C.num_workers)
         pbar = tqdm(enumerate(loader), total=len(loader))
+        print('epoch:', epoch)
+        if C.dist:
+            sampler.set_epoch(epoch)
         for it, (input_ids, targets) in pbar:
             input_ids = input_ids.to(C.device)
             targets = targets.to(C.device)
@@ -297,20 +306,24 @@ def run(C, rank=None):
                 param_group["lr"] = lr
 
             # for micro_step in range(C.gradient_accumulation_steps):
-            #     with ctx:
-            logits, loss = model(input_ids, targets)
+            with ctx:
+                logits, loss = model(input_ids, targets)
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
-            # clip the gradient
-            if C.grad_clip != 0.0:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), C.grad_clip)
-            # step the optimizer and scaler if training in fp16
-            scaler.step(optimizer)
-            scaler.update()
-            # flush the gradients as soon as we can, no need for this memory anymore
-            optimizer.zero_grad(set_to_none=True)
+            if (it + 1) % C.gradient_accumulation_steps == 0:
+                # clip the gradient
+                if C.grad_clip != 0.0:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), C.grad_clip)
+                # step the optimizer and scaler if training in fp16
+                scaler.step(optimizer)
+                scaler.update()
+                # flush the gradients as soon as we can, no need for this memory anymore
+                optimizer.zero_grad(set_to_none=True)
+                iter_num += 1
+                local_iter_num += 1
+
 
             # timing and logging
             t1 = time.time()
@@ -323,14 +336,15 @@ def run(C, rank=None):
                     mfu = raw_model.estimate_mfu(C.batch_size, dt)  # C.batch_size * C.gradient_accumulation_steps
                     running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
                 print(f"iter {iter_num}: loss {lossf:.4f}, time {dt * 1000:.2f}ms, mfu {running_mfu * 100:.2f}%")
-            iter_num += 1
-            local_iter_num += 1
+
 
             # evaluate the loss on train/val sets and write checkpoints
             if iter_num % C.eval_interval == 0:
-                if C.validate:
+                if C.validate and (iter_num % (10000*C.eval_interval) == 0):
                     losses = estimate_loss()
                     print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+                else:
+                    losses = {"train": 10.0, "val": 10.0}
                 if (C.validate and losses["val"] < best_val_loss) or C.always_save_checkpoint:
                     best_val_loss = losses["val"]  # if C.validate else 0.
                     if iter_num > 0:
@@ -347,7 +361,7 @@ def run(C, rank=None):
                                 }
                                 print("saving checkpoint with validation loss %f" % losses["val"])
                                 os.makedirs(C.out_dir, exist_ok=True)
-                                torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
+                                torch.save(checkpoint, os.path.join(C.out_dir, f"{iter_num}_ckpt.pt"))
                         else:
                             raw_model = model.module if hasattr(model, "module") else model
                             checkpoint = {
@@ -360,7 +374,7 @@ def run(C, rank=None):
                             }
                             print("saving checkpoint with validation loss %f" % losses["val"])
                             os.makedirs(C.out_dir, exist_ok=True)
-                            torch.save(checkpoint, os.path.join(C.out_dir, "ckpt.pt"))
+                            torch.save(checkpoint, os.path.join(C.out_dir, f"{iter_num}_ckpt.pt"))
 
         if iter_num == 0 and C.eval_only:
             break

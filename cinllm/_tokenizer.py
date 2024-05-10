@@ -226,7 +226,7 @@ class CinDataset(Dataset):
         return len(self.texts)
 
     def __getitem__(self, idx):
-        text = self.texts[idx]
+        text = self.texts[idx][:1500]
         # if self.conditions is not None:
         #     raw_input_ids = raw_input_ids[1:]  # Remove the first token (<s>)
         input_ids = text[:-1]

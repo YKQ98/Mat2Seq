@@ -146,7 +146,6 @@ if __name__ == "__main__":
             val_data.append(tokenizer.encode(t))
 
     print(f"vocab size: {len(tokenizer.token_to_id)}")
-
     print("exporting to .pkl files...")
     train_data = np.array(train_data, dtype=np.uint16)
     print(f"train has {len(train_data):,} samples")
