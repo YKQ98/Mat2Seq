@@ -14,7 +14,7 @@ validate: True
 dataset: '/mnt/data/shared/keqiangyan/tokens_cifs_0417'
 #dataset: '/mnt/data/shared/keqiangyan/tokens_mp_20'
 gradient_accumulation_steps: 1
-batch_size: 28
+batch_size: 32
 block_size: 1500
 
 # n_layer: 16
