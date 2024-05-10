@@ -1,8 +1,8 @@
 out_dir: '/mnt/data/shared/xinerli/cryllm/out/cinllm_23M_16_16_1024_112_1500_5e4_5w'
 #init_from: resume
-eval_interval: 100  # how often to evaluate against the validation set
-eval_iters_train: 100
-log_interval: 10  # how often to print to the console (1 = every iteration)
+eval_interval: 1000  # how often to evaluate against the validation set
+eval_iters_train: 1000
+log_interval: 100  # how often to print to the console (1 = every iteration)
 
 # whether to always save a checkpoint
 always_save_checkpoint: True
@@ -13,7 +13,7 @@ validate: True
 # dataset: '/data/keqiangyan/cryllm/CryLLM/tokens_mp20_0314' # old pos
 dataset: '/mnt/data/shared/keqiangyan/tokens_cifs_0417'
 #dataset: '/mnt/data/shared/keqiangyan/tokens_mp_20'
-gradient_accumulation_steps: 10
+gradient_accumulation_steps: 1
 batch_size: 28
 block_size: 1500
 
@@ -27,14 +27,14 @@ dropout: 0.1
 # learning_rate: 1e-3 will fail, 7e-4 will be unstable after 5000 iter, 3e-4 best for now
 learning_rate: 5e-4
 decay_lr: True
-max_iters: 50000
+max_iters: 500000
 # max_iters: 35000
-lr_decay_iters: 50000
+lr_decay_iters: 500000
 # lr_decay_iters: 35000
 min_lr: 5e-5
 beta2: 0.99
 
-warmup_iters: 100
+warmup_iters: 1000
 
 dist: True
 
