@@ -288,6 +288,7 @@ def run(C, rank=None):
                                 batch_size=C.batch_size,
                                 num_workers=C.num_workers)
         pbar = tqdm(enumerate(loader), total=len(loader))
+        loss_accu = 0.
         for it, (input_ids, targets) in pbar:
             input_ids = input_ids.to(C.device)
             targets = targets.to(C.device)
@@ -299,18 +300,23 @@ def run(C, rank=None):
             # for micro_step in range(C.gradient_accumulation_steps):
             #     with ctx:
             logits, loss = model(input_ids, targets)
-            # immediately async prefetch next batch while model is doing the forward pass on the GPU
-            # backward pass, with gradient scaling if training in fp16
-            scaler.scale(loss).backward()
-            # clip the gradient
-            if C.grad_clip != 0.0:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), C.grad_clip)
-            # step the optimizer and scaler if training in fp16
-            scaler.step(optimizer)
-            scaler.update()
-            # flush the gradients as soon as we can, no need for this memory anymore
-            optimizer.zero_grad(set_to_none=True)
+            if (it + 1) % C.gradient_accumulation_steps:
+                loss_accu = loss_accu / C.gradient_accumulation_steps
+                # immediately async prefetch next batch while model is doing the forward pass on the GPU
+                # backward pass, with gradient scaling if training in fp16
+                scaler.scale(loss_accu).backward()
+                # clip the gradient
+                if C.grad_clip != 0.0:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), C.grad_clip)
+                # step the optimizer and scaler if training in fp16
+                scaler.step(optimizer)
+                scaler.update()
+                # flush the gradients as soon as we can, no need for this memory anymore
+                optimizer.zero_grad(set_to_none=True)
+                loss_accu = 0.
+            else:
+                loss_accu += loss
 
             # timing and logging
             t1 = time.time()
