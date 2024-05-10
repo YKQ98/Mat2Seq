@@ -315,6 +315,8 @@ def run(C, rank=None):
                 # flush the gradients as soon as we can, no need for this memory anymore
                 optimizer.zero_grad(set_to_none=True)
                 loss_accu = 0.
+                iter_num += 1
+                local_iter_num += 1
             else:
                 loss_accu += loss
 
@@ -329,8 +331,7 @@ def run(C, rank=None):
                     mfu = raw_model.estimate_mfu(C.batch_size, dt)  # C.batch_size * C.gradient_accumulation_steps
                     running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
                 print(f"iter {iter_num}: loss {lossf:.4f}, time {dt * 1000:.2f}ms, mfu {running_mfu * 100:.2f}%")
-            iter_num += 1
-            local_iter_num += 1
+            
 
             # evaluate the loss on train/val sets and write checkpoints
             if iter_num % C.eval_interval == 0:
