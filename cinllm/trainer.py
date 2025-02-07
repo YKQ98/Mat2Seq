@@ -1,8 +1,3 @@
-"""
-Simple training loop; Boilerplate that could apply to any arbitrary neural network,
-so nothing in this file really has anything to do with GPT specifically.
-"""
-
 import math
 import logging
 
@@ -82,8 +77,6 @@ class Trainer:
                 # place data on the correct device
                 input_ids = input_ids.to(self.device)
                 targets = targets.to(self.device)
-                # prop = prop.to(self.device)
-                # scaffold = scaffold.to(self.device)
 
                 # forward the model
                 with torch.cuda.amp.autocast():

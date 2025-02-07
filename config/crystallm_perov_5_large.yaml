@@ -9,7 +9,7 @@ always_save_checkpoint: True
 # whether to validate with a validation set
 validate: True
 
-dataset: 'out/tokens_perov_5'
+dataset: '/mnt/data/shared/tokens_perov_5'
 gradient_accumulation_steps: 4
 batch_size: 16
 block_size: 2048

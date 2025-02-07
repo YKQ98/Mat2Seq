@@ -127,21 +127,6 @@ def run(C, rank=None):
     train_dataset = CinDataset(train_data.astype(np.int64))
     valid_dataset = CinDataset(val_data.astype(np.int64))
 
-    # def get_batch(split):
-    #     data = train_data if split == "train" else val_data
-    #
-    #     ix = torch.randint(len(data), (C.batch_size,))
-    #
-    #     x = torch.stack([torch.from_numpy((data[i:i + C.block_size]).astype(np.int64)) for i in ix])
-    #     y = torch.stack([torch.from_numpy((data[i + 1:i + 1 + C.block_size]).astype(np.int64)) for i in ix])
-    #
-    #     if device_type == "cuda":
-    #         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
-    #         x, y = x.pin_memory().to(C.device, non_blocking=True), y.pin_memory().to(C.device, non_blocking=True)
-    #     else:
-    #         x, y = x.to(C.device), y.to(C.device)
-    #     return x, y
-
     iter_num = 0
     best_val_loss = 1e9
 
@@ -340,7 +325,7 @@ def run(C, rank=None):
 
             # evaluate the loss on train/val sets and write checkpoints
             if iter_num % C.eval_interval == 0:
-                if C.validate and (iter_num % (10000*C.eval_interval) == 0):
+                if C.validate and ((iter_num+1) % (10000*C.eval_interval) == 0):
                     losses = estimate_loss()
                     print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
                 else:

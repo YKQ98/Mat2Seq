@@ -205,11 +205,6 @@ class GPT(nn.Module):
             x = block(x)
         x = self.transformer.ln_f(x)
 
-        # if targets is not None:
-        #     # if we are given some desired targets also calculate the loss
-        #     logits = self.lm_head(x)
-        #     loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-
         if targets is not None:
             mask = targets != self.padding_token_id
             logits = self.lm_head(x)
@@ -234,7 +229,6 @@ class GPT(nn.Module):
 
     def configure_optimizers(self, weight_decay, learning_rate, betas):
         """
-        This long function is unfortunately doing something very simple and is being very defensive:
         We are separating out all parameters of the model into two buckets: those that will experience
         weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
         We are then returning the PyTorch optimizer object.
@@ -248,9 +242,6 @@ class GPT(nn.Module):
         for mn, m in self.named_modules():
             for pn, p in m.named_parameters():
                 fpn = "%s.%s" % (mn, pn) if mn else pn # full param name
-                # random note: because named_modules and named_parameters are recursive
-                # we will see the same tensors p many many times. but doing it this way
-                # allows us to know which parent module any tensor p belongs to...
                 if pn.endswith("bias"):
                     # all biases will not be decayed
                     no_decay.add(fpn)
@@ -261,12 +252,6 @@ class GPT(nn.Module):
                     # weights of blacklist modules will NOT be weight decayed
                     no_decay.add(fpn)
 
-        # subtle: "transformer.wte.weight" and "lm_head.weight" are tied, so they
-        # will appear in the no_decay and decay sets respectively after the above.
-        # In addition, because named_parameters() doesn't return duplicates, it
-        # will only return the first occurrence, keyed by "transformer.wte.weight", below.
-        # so let's manually remove "lm_head.weight" from decay set. This will include
-        # this tensor into optimization via transformer.wte.weight only, and not decayed.
         decay.remove("lm_head.weight")
 
         # validate that we considered every parameter

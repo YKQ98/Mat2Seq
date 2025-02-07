@@ -1,4 +1,4 @@
-out_dir: '/mnt/data/shared/xinerli/cryllm/out/cinllm_23M_16_16_1024_112_1500_5e4_5w'
+out_dir: 'out/cinllm_23M'
 #init_from: resume
 eval_interval: 1000  # how often to evaluate against the validation set
 eval_iters_train: 1000
@@ -10,15 +10,11 @@ always_save_checkpoint: True
 # whether to validate with a validation set
 validate: True
 
-# dataset: '/data/keqiangyan/cryllm/CryLLM/tokens_mp20_0314' # old pos
-dataset: '/mnt/data/shared/keqiangyan/tokens_cifs_0417'
-#dataset: '/mnt/data/shared/keqiangyan/tokens_mp_20'
+dataset: '/mnt/data/shared/tokens_cifs_0417'
 gradient_accumulation_steps: 1
 batch_size: 32
 block_size: 1500
 
-# n_layer: 16
-# n_head: 16
 n_layer: 16
 n_head: 16
 n_embd: 1024
@@ -28,13 +24,9 @@ dropout: 0.1
 learning_rate: 5e-4
 decay_lr: True
 max_iters: 500000
-# max_iters: 35000
 lr_decay_iters: 500000
-# lr_decay_iters: 35000
 min_lr: 5e-5
 beta2: 0.99
 
 warmup_iters: 1000
-
-dist: True
 
