@@ -1,13 +1,15 @@
-Benchmarks
+Mat2Seq
 ==========
 
-CrystaLLM has been evaluated on the Perov-5, Carbon-24, MP-20 and MPTS-52 benchmarks. This document describes how to 
+Mat2Seq is a framework for creating unique and complete crystal sequence representations, as well as constructing a material LLM capable of generating novel crystal structures with desired properties of interest.
+
+Mat2Seq has been evaluated on the Perov-5, Carbon-24, MP-20 and MPTS-52 benchmarks. This document describes how to 
 reproduce the benchmark evaluation experiments described in the paper. The Perov-5, Carbon-24 and MP-20 datasets are
 from the [CDVAE repository](https://github.com/txie-93/cdvae/tree/f857f598d6f6cca5dc1ea0582d228f12dcc2c2ea/data), 
 while the MPTS-52 dataset is from the 
 [DiffCSP repository](https://github.com/jiaor17/DiffCSP/tree/fd6f48cef306193c0fb678db785424abcdad6dfd/data).
 
-To assess CrystaLLM on a benchmark, a sequence of steps is required to: 
+To assess Mat2Seq on a benchmark, a sequence of steps is required to: 
 1. pre-process the original benchmark dataset
 2. tokenize the pre-processed CIF files
 3. train the model
@@ -15,7 +17,7 @@ To assess CrystaLLM on a benchmark, a sequence of steps is required to:
 5. post-process the generated CIF files
 6. compute the benchmark metrics.
 
-Below, we will provide instructions using the Perov-5 benchmark as an example.
+Below, we will provide instructions using the MP-20 benchmark as an example.
 
 ### 1. Pre-processing the original benchmark dataset
 
@@ -55,7 +57,7 @@ python cinllm/tokenize_cifs.py \
 
 ### 3. Train the model
 
-Train a CrystaLLM model from scratch using only the benchmark training set:
+Train a LM model from scratch using only the benchmark training set:
 ```shell
 python bin/train.py --config=config/crystallm_perov_5_small.yaml device=cuda dtype=float16
 ```
@@ -116,7 +118,7 @@ small size only. Its generated CIF files can be found in `gen_v1_minus_mpts_52_s
 `tokens_v1_minus_mpts_52.tar.gz`).
 
 
-## Citing CrystaLLM
+## Citing Mat2Seq
 
 Please use the following bibtex entry:
 ```
