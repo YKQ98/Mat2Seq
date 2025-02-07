@@ -114,3 +114,15 @@ All models come in two sizes: `small` and `large`. One exception is the model tr
 minus the MPTS-52 validation and training sets, `crystallm_v1_minus_mpts_52_small.tar.gz`, which is available in the 
 small size only. Its generated CIF files can be found in `gen_v1_minus_mpts_52_small.tar.gz` (and the tokens are in 
 `tokens_v1_minus_mpts_52.tar.gz`).
+
+
+## Citing CrystaLLM
+
+Please use the following bibtex entry:
+```
+@inproceedings{yaninvariant,
+  title={Invariant Tokenization of Crystalline Materials for Language Model Enabled Generation},
+  author={Yan, Keqiang and Li, Xiner and Ling, Hongyi and Ashen, Kenna and Edwards, Carl and Arr{\'o}yave, Raymundo and Zitnik, Marinka and Ji, Heng and Qian, Xiaofeng and Qian, Xiaoning and others},
+  booktitle={The Thirty-eighth Annual Conference on Neural Information Processing Systems}
+}
+```
