@@ -147,11 +147,6 @@ def run(C, rank=None):
         model_args["vocab_size"] = meta_vocab_size if meta_vocab_size is not None else 371
         gptconf = GPTConfig(**model_args)
         model = GPT(gptconf)
-        # ckpt_path = '/mnt/data/shared/xinerli/cryllm/out/cinllm_23M_16_16_1024_38_2048_3e4_200w/750000_ckpt.pt'
-        # print(f"Loading checkpoint from {ckpt_path}...")
-        # checkpoint = torch.load(ckpt_path, map_location=C.device)
-        # state_dict = checkpoint["model"]
-        # model.load_state_dict(state_dict, strict=True)
     elif C.init_from == "resume":
         print(f"Resuming training from {C.out_dir}...")
         ckpt_path = os.path.join(C.out_dir, "690000_ckpt.pt")
