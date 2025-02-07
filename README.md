@@ -1,6 +1,6 @@
 Mat2Seq
 ==========
-
+This code accompanies the NeurIPS 2024 paper [Invariant Tokenization of Crystalline Materials for Language Model Enabled Generation](https://openreview.net/forum?id=18FGRNd0wZ).
 Mat2Seq is a framework for creating unique and complete crystal sequence representations, as well as constructing a material LLM capable of generating novel crystal structures with desired properties of interest.
 
 Mat2Seq has been evaluated on the Perov-5, Carbon-24, MP-20 and MPTS-52 benchmarks. This document describes how to 
