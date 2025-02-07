@@ -13,7 +13,7 @@ try:
 except ImportError:
     import pickle
 
-from cinllm import CIFTokenizer
+from mat2seq import CIFTokenizer
 from crystallm import array_split
 
 

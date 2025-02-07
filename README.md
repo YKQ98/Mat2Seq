@@ -23,9 +23,9 @@ Below, we will provide instructions using the MP-20 benchmark as an example.
 
 Prepare the benchmark CSV files:
 ```shell
-python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/train.csv mp_20_train_cin.tar.gz
-python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/val.csv mp_20_val_cin.tar.gz
-python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/test.csv mp_20_test_cin.tar.gz
+python mat2seq/prepare_csv_benchmark.py resources/benchmarks/mp_20/train.csv mp_20_train_cin.tar.gz
+python mat2seq/prepare_csv_benchmark.py resources/benchmarks/mp_20/val.csv mp_20_val_cin.tar.gz
+python mat2seq/prepare_csv_benchmark.py resources/benchmarks/mp_20/test.csv mp_20_test_cin.tar.gz
 ```
 
 Convert the .tar.gz files to .pkl.gz files for more efficient processing: 
@@ -37,16 +37,16 @@ python bin/tar_to_pickle.py mp_20_test_cin.tar.gz mp_20_test_cin.pkl.gz
 
 Pre-process the benchmark CIF files:
 ```shell
-python cinllm/preprocess.py mp_20_train_cin.pkl.gz --out mp_20_train_cin_prep.pkl.gz --workers 4
-python cinllm/preprocess.py mp_20_val_cin.pkl.gz --out mp_20_val_cin_prep.pkl.gz --workers 4
-python cinllm/preprocess.py mp_20_test_cin.pkl.gz --out mp_20_test_cin_prep.pkl.gz --workers 4
+python mat2seq/preprocess.py mp_20_train_cin.pkl.gz --out mp_20_train_cin_prep.pkl.gz --workers 4
+python mat2seq/preprocess.py mp_20_val_cin.pkl.gz --out mp_20_val_cin_prep.pkl.gz --workers 4
+python mat2seq/preprocess.py mp_20_test_cin.pkl.gz --out mp_20_test_cin_prep.pkl.gz --workers 4
 ```
 
 ### 2. Tokenize the pre-processed CIF files
 
 Tokenize the benchmark training and validation sets:
 ```shell
-python cinllm/tokenize_cifs.py \
+python mat2seq/tokenize_cifs.py \
 --train_fname mp_20_train_cin_prep.pkl.gz \
 --val_fname mp_20_val_cin_prep.pkl.gz \
 --out_dir tokens_mp_20/ \
@@ -71,7 +71,7 @@ python bin/make_prompts.py perov_5_test_prep.pkl.gz -o prompts_perov_5_test.tar.
 
 Generate the CIF files, performing 20 generation attempts from each of the prompts: 
 ```shell
-python cinllm/generate_cifs.py --model ./out/cinllm_mp_20_314_pos_order --prompts prompts_mp20_pos.tar.gz --out gen_mp_20_pos_raw.tar.gz --device cuda --num-gens 1
+python mat2seq/generate_cifs.py --model ./out/cinllm_mp_20_314_pos_order --prompts prompts_mp20_pos.tar.gz --out gen_mp_20_pos_raw.tar.gz --device cuda --num-gens 1
 ```
 
 ### 5. Post-process the generated CIF files

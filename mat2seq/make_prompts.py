@@ -7,7 +7,7 @@ import re
 import io
 import tarfile
 from tqdm import tqdm
-from cinllm import CIFTokenizer
+from mat2seq import CIFTokenizer
 
 PATTERN_COMP = re.compile(r"(data_[^\n]*\n)", re.MULTILINE)
 PATTERN_COMP_SG = re.compile(r"(data_[^\n]*\n)loop_[\s\S]*?(_symmetry_space_group_name_H-M[^\n]*\n)", re.MULTILINE)

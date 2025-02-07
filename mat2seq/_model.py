@@ -10,7 +10,7 @@ from torch import Tensor
 import torch.nn as nn
 from torch.nn import functional as F
 
-from cinllm import CIFTokenizer
+from mat2seq import CIFTokenizer
 
 
 @dataclass

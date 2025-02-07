@@ -10,8 +10,8 @@ from tqdm import tqdm
 from contextlib import nullcontext
 import torch
 
-from cinllm import CIFTokenizer
-from cinllm import (
+from mat2seq import CIFTokenizer
+from mat2seq import (
     GPT,
     GPTConfig,
 )
