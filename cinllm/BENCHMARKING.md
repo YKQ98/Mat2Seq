@@ -22,7 +22,6 @@ Below, we will provide instructions using the Perov-5 benchmark as an example.
 Prepare the benchmark CSV files:
 ```shell
 python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/train.csv mp_20_train_cin.tar.gz
-# python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/train.csv /mnt/data/shared/keqiangyan/mp20full/mp_20_train_cin.tar.gz --full_order 1
 python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/val.csv mp_20_val_cin.tar.gz
 python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/test.csv mp_20_test_cin.tar.gz
 ```
@@ -30,7 +29,6 @@ python cinllm/prepare_csv_benchmark.py resources/benchmarks/mp_20/test.csv mp_20
 Convert the .tar.gz files to .pkl.gz files for more efficient processing: 
 ```shell
 python bin/tar_to_pickle.py mp_20_train_cin.tar.gz mp_20_train_cin.pkl.gz
-# python bin/tar_to_pickle.py /mnt/data/shared/keqiangyan/mp20full/mp_20_train_cin.tar.gz /mnt/data/shared/keqiangyan/mp20full/mp_20_train_cin.pkl.gz
 python bin/tar_to_pickle.py mp_20_val_cin.tar.gz mp_20_val_cin.pkl.gz
 python bin/tar_to_pickle.py mp_20_test_cin.tar.gz mp_20_test_cin.pkl.gz
 ```
@@ -38,7 +36,6 @@ python bin/tar_to_pickle.py mp_20_test_cin.tar.gz mp_20_test_cin.pkl.gz
 Pre-process the benchmark CIF files:
 ```shell
 python cinllm/preprocess.py mp_20_train_cin.pkl.gz --out mp_20_train_cin_prep.pkl.gz --workers 4
-# python cinllm/preprocess.py /mnt/data/shared/keqiangyan/mp20full/mp_20_train_cin.pkl.gz --out /mnt/data/shared/keqiangyan/mp20full/mp_20_train_cin_prep.pkl.gz --workers 4
 python cinllm/preprocess.py mp_20_val_cin.pkl.gz --out mp_20_val_cin_prep.pkl.gz --workers 4
 python cinllm/preprocess.py mp_20_test_cin.pkl.gz --out mp_20_test_cin_prep.pkl.gz --workers 4
 ```
@@ -48,11 +45,10 @@ python cinllm/preprocess.py mp_20_test_cin.pkl.gz --out mp_20_test_cin_prep.pkl.
 Tokenize the benchmark training and validation sets:
 ```shell
 python cinllm/tokenize_cifs.py \
---train_fname perov_5_train_prep.pkl.gz \
---val_fname perov_5_val_prep.pkl.gz \
---out_dir tokens_perov_5/ \
+--train_fname mp_20_train_cin_prep.pkl.gz \
+--val_fname mp_20_val_cin_prep.pkl.gz \
+--out_dir tokens_mp_20/ \
 --workers 4
-# python cinllm/tokenize_cifs.py --train_fname /mnt/data/shared/keqiangyan/mp20full/mp_20_train_cin_prep.pkl.gz --val_fname /mnt/data/shared/keqiangyan/mp20full/mp_20_val_cin_prep.pkl.gz --out_dir tokens_mp_20_full --workers 4
 ```
 
 
